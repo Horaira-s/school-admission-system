@@ -1,0 +1,15 @@
+# Assumptions and design decisions
+
+1. **Student identity:** The UI asks for a 17-digit numeric birth-registration number and sends it in `X-Student-Id`. This follows the PDF's instruction that login is not required and that this number identifies the student. This is identification, not strong authentication; a production deployment should add verified OTP or another identity check.
+2. **Class identity:** Each class/shift combination is one independent admission unit with its own seat capacity. For example, “Class 6 - Morning Shift” and “Class 6 - Day Shift” are separate records.
+3. **First come, first served:** A successful reservation is the moment the backend commits the hold transaction. No lottery or waitlist is implemented.
+4. **Hold duration:** `HOLD_DURATION_SECONDS` controls the hold duration and defaults to 600 seconds. Values are bounded to 30–86,400 seconds to prevent accidental unusable configurations.
+5. **Seat accounting:** A seat is occupied by a non-expired `HELD` record or a `CONFIRMED` record. Expired and cancelled records do not occupy seats. Expiration is materialized on API activity; no client request is needed to release a seat because capacity calculations exclude holds whose expiration timestamp has passed.
+6. **One application per student per class:** A student can have at most one active or confirmed application in a class. Once a hold expires or is cancelled, the student may apply again. A confirmed application remains active and blocks a second application for that class.
+7. **Payment simulation:** The PDF says the “Pay admission fee” action may assume payment succeeded and no real payment gateway is required. The confirmation endpoint therefore simulates successful fee payment; it does not collect money.
+8. **Admin access:** The brief requires school-admin functions in the UI but does not define admin authentication or an admin API. The demo therefore exposes class creation without login. Add role-based authentication before production use.
+9. **IDs:** Public IDs use `c_` and `h_` prefixes followed by GUID values. This preserves the example contract (`c_123`, `h_789`) while ensuring generated IDs are unique. The sample IDs in the PDF are illustrative, not fixed identifiers.
+10. **API response times:** All timestamps are UTC ISO-8601 values. The frontend renders them in the user's browser locale.
+11. **Database lifecycle:** The API creates the schema on first startup with EF Core `EnsureCreated`; PostgreSQL data is stored in the named Docker volume. For production schema evolution, replace this with versioned EF Core migrations.
+12. **Frontend configuration:** `VITE_API_BASE_URL` is injected at frontend image build time because Vite bundles environment values into static assets. Rebuild the frontend image after changing this variable.
+13. **Seat count consistency:** Every hold operation locks its corresponding class row (`SELECT ... FOR UPDATE`) inside a serializable transaction before counting occupied seats and inserting a hold. This serializes simultaneous requests for the same class across API instances and prevents overselling.
